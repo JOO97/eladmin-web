@@ -5,7 +5,8 @@ import Layout from '../layout/index'
 Vue.use(Router)
 
 export const constantRouterMap = [
-  { path: '/login',
+  {
+    path: '/login',
     meta: { title: '登录', noCache: true },
     component: (resolve) => require(['@/views/login'], resolve),
     hidden: true
@@ -52,7 +53,8 @@ export const constantRouterMap = [
     children: [
       {
         path: 'center',
-        component: (resolve) => require(['@/views/system/user/center'], resolve),
+        component: (resolve) =>
+          require(['@/views/system/user/center'], resolve),
         name: '个人中心',
         meta: { title: '个人中心' }
       }
