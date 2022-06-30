@@ -2,365 +2,277 @@
   <div class="app-container">
     <!--工具栏-->
     <div class="head-container">
-      <div v-if="crud.props.searchToggle">
-        <!-- 搜索 -->
-        <el-input
-          v-model="query.name"
-          clearable
-          size="small"
-          placeholder="输入新闻名称搜索"
-          style="width: 200px"
-          class="filter-item"
-          @keyup.enter.native="crud.toQuery"
-        />
-        <date-range-picker v-model="query.createTime" class="date-item" />
-        <el-select
-          v-model="query.enabled"
-          clearable
-          size="small"
-          placeholder="状态"
-          class="filter-item"
-          style="width: 90px"
-          @change="crud.toQuery"
-        >
-          <el-option
-            v-for="item in enabledTypeOptions"
-            :key="item.key"
-            :label="item.display_name"
-            :value="item.key"
-          />
-        </el-select>
-        <rrOperation />
-      </div>
-      <crudOperation :permission="permission" />
-    </div>
-    <!--表单组件-->
-    <el-dialog
-      append-to-body
-      :close-on-click-modal="false"
-      :before-close="crud.cancelCU"
-      :visible.sync="crud.status.cu > 0"
-      :title="crud.status.title"
-      width="800px"
-    >
-      <el-form
-        ref="form"
-        inline
-        :model="form"
-        :rules="rules"
-        size="small"
-        label-width="80px"
+      <el-button
+        v-permission="['admin']"
+        class="filter-item"
+        size="mini"
+        type="primary"
+        icon="el-icon-plus"
+        @click="showDialog(false)"
       >
-        <el-form-item label="标题" prop="name">
-          <el-input v-model="form.title" style="width: 370px" />
-        </el-form-item>
-        <el-form-item label="内容" prop="name">
-          <div ref="editor" class="text" />
-          <!-- <el-input v-model="form.content" style="width: 370px" /> -->
-        </el-form-item>
-        <el-form-item label="新闻排序" prop="deptSort">
-          <el-input-number
-            v-model.number="form.deptSort"
-            :min="0"
-            :max="999"
-            controls-position="right"
-            style="width: 370px"
-          />
-        </el-form-item>
-        <el-form-item label="顶级新闻">
-          <el-radio-group v-model="form.isTop" style="width: 140px">
-            <el-radio label="1">是</el-radio>
-            <el-radio label="0">否</el-radio>
-          </el-radio-group>
-        </el-form-item>
-        <el-form-item label="状态" prop="enabled">
-          <el-radio
-            v-for="item in dict.dept_status"
-            :key="item.id"
-            v-model="form.enabled"
-            :label="item.value"
-          >{{ item.label }}</el-radio>
-        </el-form-item>
-        <el-form-item
-          v-if="form.isTop === '0'"
-          style="margin-bottom: 0"
-          label="上级新闻"
-          prop="pid"
-        >
-          <treeselect
-            v-model="form.pid"
-            :load-options="loadDepts"
-            :options="depts"
-            style="width: 370px"
-            placeholder="选择上级类目"
-          />
-        </el-form-item>
-      </el-form>
-      <div slot="footer" class="dialog-footer">
-        <el-button type="text" @click="crud.cancelCU">取消</el-button>
-        <el-button
-          :loading="crud.status.cu === 2"
-          type="primary"
-          @click="crud.submitCU"
-        >确认</el-button>
-      </div>
-    </el-dialog>
+        新增
+      </el-button>
+    </div>
+
     <!--表格渲染-->
-    <el-table
-      ref="table"
-      v-loading="crud.loading"
-      lazy
-      :load="getDeptDatas"
-      :tree-props="{ children: 'children', hasChildren: 'hasChildren' }"
-      :data="crud.data"
-      row-key="id"
-      @select="crud.selectChange"
-      @select-all="crud.selectAllChange"
-      @selection-change="crud.selectionChangeHandler"
-    >
-      <el-table-column :selectable="checkboxT" type="selection" width="55" />
-      <el-table-column label="名称" prop="name" />
-      <el-table-column label="排序" prop="deptSort" />
+    <el-table ref="table" v-loading="loading" :data="list" row-key="id">
+      <el-table-column label="标题" prop="title" />
+      <el-table-column label="来源" prop="source" />
+      <el-table-column prop="publishTime" label="发布时间" />
       <el-table-column prop="createTime" label="创建日期" />
       <el-table-column
-        v-if="checkPer(['admin', 'dept:edit', 'dept:del'])"
+        v-if="checkPer(['admin'])"
         label="操作"
         width="130px"
         align="center"
         fixed="right"
       >
         <template slot-scope="scope">
-          <udOperation
-            :data="scope.row"
-            :permission="permission"
-            :disabled-dle="scope.row.id === 1"
-            msg="确定删除吗,如果存在下级节点则一并删除，此操作不能撤销！"
-          />
+          <el-button
+            v-permission="['admin']"
+            class="filter-item"
+            size="mini"
+            type="warning"
+            icon="el-icon-edit"
+            @click="showDialog(scope.row)"
+          >
+          </el-button>
+
+          <el-popconfirm
+            title="是否确定删除?"
+            @confirm="handleRemove(scope.row)"
+          >
+            <el-button
+              slot="reference"
+              v-permission="['admin']"
+              class="filter-item"
+              size="mini"
+              type="danger"
+              icon="el-icon-delete"
+            >
+            </el-button>
+          </el-popconfirm>
         </template>
       </el-table-column>
     </el-table>
+    <div style="text-align: right; margin-top: 6px">
+      <el-pagination
+        background
+        layout="prev, pager, next"
+        :total="total"
+        @size-change="handleSizeChange"
+        @current-change="handleCurrentChange"
+        :current-page.sync="req.currentPage"
+        :page-size="req.pageSize"
+      />
+    </div>
+    <!--表单组件-->
+    <el-dialog
+      append-to-body
+      :close-on-click-modal="false"
+      :visible.sync="dialog.visible"
+      :title="form.id ? '编辑' : '新建'"
+      width="800px"
+    >
+      <el-form
+        ref="form"
+        :model="form"
+        :rules="rules"
+        size="small"
+        label-width="80px"
+      >
+        <el-form-item label="标题" prop="title" required>
+          <el-input v-model="form.title" />
+        </el-form-item>
+        <el-form-item label="来源" prop="source" required>
+          <el-input v-model="form.source" />
+        </el-form-item>
+        <el-form-item label="是否置顶" prop="isTop" required>
+          <el-radio-group v-model="form.isTop">
+            <el-radio label="1">是</el-radio>
+            <el-radio label="0">否</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item label="发布时间" prop="publishTime" required>
+          <!-- <el-input v-model="form.publishTime" /> -->
+          <el-date-picker
+            v-model="form.publishTime"
+            type="date"
+            placeholder="选择日期"
+          >
+          </el-date-picker>
+        </el-form-item>
+        <el-form-item label="正文" prop="content" required>
+          <div ref="editor" class="text" />
+        </el-form-item>
+      </el-form>
+      <div slot="footer" class="dialog-footer">
+        <el-button type="text" @click="dialog.visible = false">取消</el-button>
+        <el-button :loading="dialog.loading" type="primary" @click="submit"
+          >确认</el-button
+        >
+      </div>
+    </el-dialog>
   </div>
 </template>
 
 <script>
-import { upload } from '@/utils/upload'
-import { mapGetters } from 'vuex'
-import crudDept from '@/api/system/dept'
-import Treeselect from '@riophae/vue-treeselect'
-import '@riophae/vue-treeselect/dist/vue-treeselect.css'
-import { LOAD_CHILDREN_OPTIONS } from '@riophae/vue-treeselect'
-import CRUD, { presenter, header, form, crud } from '@crud/crud'
-import rrOperation from '@crud/RR.operation'
-import crudOperation from '@crud/CRUD.operation'
-import udOperation from '@crud/UD.operation'
-import DateRangePicker from '@/components/DateRangePicker'
-import E from 'wangeditor'
+import { upload } from "@/utils/upload";
+import { mapGetters } from "vuex";
+import "@riophae/vue-treeselect/dist/vue-treeselect.css";
+import { LOAD_CHILDREN_OPTIONS } from "@riophae/vue-treeselect";
+import E from "wangeditor";
+
+import { parseTime, deepClone } from "@/utils";
 
 const defaultForm = {
   id: null,
-  title: null,
-  content: '',
-  isTop: '1',
-  subCount: 0,
-  pid: null,
-  deptSort: 999,
-  enabled: 'true'
-}
+  title: "",
+  content: `<ul><li>请填写正文内容</li></ul>`,
+  isTop: 1,
+  source: "STEM",
+  publishTime: parseTime(new Date(), "{y}-{m}-{d}"),
+};
+
 export default {
-  name: 'Dept',
-  components: {
-    Treeselect,
-    crudOperation,
-    rrOperation,
-    udOperation,
-    DateRangePicker
-  },
-  cruds() {
-    return CRUD({
-      title: '新闻',
-      url: 'api/dept',
-      crudMethod: { ...crudDept }
-    })
-  },
-  mixins: [presenter(), header(), form(defaultForm), crud()],
+  name: "News",
+  components: {},
+  // mixins: [presenter(), header(), form(defaultForm), crud()],
   // 设置数据字典
-  dicts: ['dept_status'],
+  dicts: ["dept_status"],
   data() {
     return {
-      depts: [],
+      loading: true,
+      list: [],
+      total: 0,
+      req: {
+        pageSize: 20,
+        currentPage: 1,
+      },
+      form: deepClone(defaultForm),
       rules: {
-        title: [{ required: true, message: '请输入标题', trigger: 'blur' }],
-        deptSort: [
-          {
-            required: true,
-            message: '请输入序号',
-            trigger: 'blur',
-            type: 'number'
-          }
-        ]
+        title: [{ required: true, message: "请输入标题", trigger: "blur" }],
+        source: [{ required: true, message: "请输入来源", trigger: "blur" }],
       },
       permission: {
-        add: ['admin', 'dept:add'],
-        // edit: ["admin", "dept:edit"],
-        del: ['admin', 'dept:del']
+        add: ["admin"],
+        edit: ["admin"],
+        del: ["admin"],
       },
       enabledTypeOptions: [
-        { key: 'true', display_name: '正常' },
-        { key: 'false', display_name: '禁用' }
-      ]
-    }
+        { key: "true", display_name: "正常" },
+        { key: "false", display_name: "禁用" },
+      ],
+      editor: null,
+      dialog: {
+        visible: false,
+        loading: true,
+      },
+    };
   },
   computed: {
-    ...mapGetters(['imagesUploadApi', 'baseApi'])
+    ...mapGetters(["imagesUploadApi", "baseApi"]),
+  },
+  watch: {
+    "dialog.visible"(val) {
+      if (val && !this.editor) {
+        this.$nextTick(() => this.initEditor());
+      }
+      if (!val) {
+        this.form = deepClone(defaultForm);
+        this.$refs.form.resetFields();
+      }
+    },
   },
   mounted() {
-    this.init()
+    this.getList();
+    console.log(deepClone(defaultForm));
   },
   methods: {
-    init() {
-      this.initEditor()
+    getList() {
+      this.list = [
+        {
+          id: 1001,
+          title: "xxxxxxx",
+          source: "STEM",
+          publishTime: "2020-01-01",
+          content: "",
+          isTop: 1,
+        },
+      ];
+      this.loading = false;
     },
     initEditor() {
-      const editor = new E(this.$refs.editor)
+      console.log(this.form);
+      const editor = new E(this.$refs.editor);
       // 自定义菜单配置
-      editor.config.zIndex = 5
+      editor.config.zIndex = 5;
       // 文件上传
       editor.config.customUploadImg = (files, insert) => {
         // files 是 input 中选中的文件列表
         // insert 是获取图片 url 后，插入到编辑器的方法
         files.forEach((image) => {
           upload(this.imagesUploadApi, image).then((res) => {
-            const data = res.data
+            const data = res.data;
             const url =
-              this.baseApi + '/file/' + data.type + '/' + data.realName
-            insert(url)
-          })
-        })
-      }
+              this.baseApi + "/file/" + data.type + "/" + data.realName;
+            insert(url);
+          });
+        });
+      };
       editor.config.onchange = (html) => {
-        this.editorContent = html
-      }
-      editor.create()
+        this.form.content = html;
+      };
+      editor.create();
       // 初始化数据
-      editor.txt.html(this.form.content)
+      editor.txt.html(this.form.content);
+      this.editor = editor;
     },
-    getDeptDatas(tree, treeNode, resolve) {
-      const params = { pid: tree.id }
-      setTimeout(() => {
-        crudDept.getDepts(params).then((res) => {
-          resolve(res.content)
-        })
-      }, 100)
+
+    showDialog(info) {
+      if (info) this.form = deepClone(info);
+      this.dialog.visible = true;
+      this.dialog.loading = false;
     },
-    // 新增与编辑前做的操作
-    [CRUD.HOOK.afterToCU](crud, form) {
-      if (form.pid !== null) {
-        form.isTop = '0'
-      } else if (form.id !== null) {
-        form.isTop = '1'
-      }
-      form.enabled = `${form.enabled}`
-      if (form.id != null) {
-        this.getSupDepts(form.id)
-      } else {
-        this.getDepts()
-      }
-    },
-    getSupDepts(id) {
-      crudDept.getDeptSuperior(id).then((res) => {
-        const date = res.content
-        this.buildDepts(date)
-        this.depts = date
-      })
-    },
-    buildDepts(depts) {
-      depts.forEach((data) => {
-        if (data.children) {
-          this.buildDepts(data.children)
+    /**
+     * 提交弹窗
+     */
+    submit() {
+      this.$refs.form.validate((valid) => {
+        this.dialog.loading = true;
+        if (!valid) {
+          this.$message({
+            message: "请正确填写新闻信息",
+            type: "warning",
+          });
+          this.dialog.loading = false;
+          return;
         }
-        if (data.hasChildren && !data.children) {
-          data.children = null
-        }
-      })
+        //TODO 新增/编辑新闻
+      });
     },
-    getDepts() {
-      crudDept.getDepts({ enabled: true }).then((res) => {
-        this.depts = res.content.map(function(obj) {
-          if (obj.hasChildren) {
-            obj.children = null
-          }
-          return obj
-        })
-      })
+    /**
+     * 删除
+     */
+    handleRemove(info) {
+      console.log(info);
     },
-    // 获取弹窗内新闻数据
-    loadDepts({ action, parentNode, callback }) {
-      if (action === LOAD_CHILDREN_OPTIONS) {
-        crudDept.getDepts({ enabled: true, pid: parentNode.id }).then((res) => {
-          parentNode.children = res.content.map(function(obj) {
-            if (obj.hasChildren) {
-              obj.children = null
-            }
-            return obj
-          })
-          setTimeout(() => {
-            callback()
-          }, 100)
-        })
-      }
+    /**
+     * change pageSize
+     */
+    handleSizeChange(size) {
+      this.req.pageSize = size;
+      this.handleSizeChange(1);
     },
-    // 提交前的验证
-    [CRUD.HOOK.afterValidateCU]() {
-      if (this.form.pid !== null && this.form.pid === this.form.id) {
-        this.$message({
-          message: '上级新闻不能为空',
-          type: 'warning'
-        })
-        return false
-      }
-      if (this.form.isTop === '1') {
-        this.form.pid = null
-      }
-      return true
+    /**
+     * change currentPage
+     */
+    handleCurrentChange(page) {
+      this.req.page = page;
+      this.getList();
     },
-    // 改变状态
-    changeEnabled(data, val) {
-      this.$confirm(
-        '此操作将 "' +
-          this.dict.label.dept_status[val] +
-          '" ' +
-          data.name +
-          '新闻, 是否继续？',
-        '提示',
-        {
-          confirmButtonText: '确定',
-          cancelButtonText: '取消',
-          type: 'warning'
-        }
-      )
-        .then(() => {
-          crudDept
-            .edit(data)
-            .then((res) => {
-              this.crud.notify(
-                this.dict.label.dept_status[val] + '成功',
-                CRUD.NOTIFICATION_TYPE.SUCCESS
-              )
-            })
-            .catch((err) => {
-              data.enabled = !data.enabled
-              console.log(err.response.data.message)
-            })
-        })
-        .catch(() => {
-          data.enabled = !data.enabled
-        })
-    },
-    checkboxT(row, rowIndex) {
-      return row.id !== 1
-    }
-  }
-}
+  },
+};
 </script>
 
 <style rel="stylesheet/scss" lang="scss" scoped>
